@@ -2,14 +2,21 @@ import pandas as pd
 import numpy as np
 import os
 import re
+import logging
 
+# ---------------- CONFIG ----------------
 INPUT_PATH = '../data/raw_data.csv'
 OUTPUT_PATH = '../data/processed/cleaned_data.csv'
 
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+
+
+# ==========================================
+# UTIL FUNCTIONS
 # ==========================================
 
 def validate_email(email):
-    """Basic email validation"""
+    """Validate email format"""
     if pd.isna(email):
         return False
     pattern = r'^[\w\.-]+@[\w\.-]+\.\w+$'
@@ -17,30 +24,39 @@ def validate_email(email):
 
 
 def safe_normalize(series):
-    """Robust normalization (handles edge cases)"""
+    """Robust normalization with edge case handling"""
+    series = series.astype(float)
+
     if series.max() == series.min():
         return pd.Series([0.5] * len(series))
+
     return (series - series.min()) / (series.max() - series.min())
 
 
+def clean_text(series):
+    """Standard text cleaning"""
+    return series.astype(str).str.strip().str.lower()
+
+
+# ==========================================
+# MAIN PIPELINE
 # ==========================================
 
 def run_cleaning_pipeline(input_file, output_file):
 
-    print("🚀 Starting data processing...")
+    logging.info("🚀 Starting data processing...")
 
-    # 1. Check file
+    # ---------------- LOAD ----------------
     if not os.path.exists(input_file):
-        print(f"❌ Error: {input_file} not found.")
+        logging.error(f"File not found: {input_file}")
         return None
 
     df = pd.read_csv(input_file)
-    print(f"📥 Loaded {len(df)} rows")
+    logging.info(f"Loaded {len(df)} rows")
 
-    # 2. Clean column names
+    # ---------------- COLUMN CLEAN ----------------
     df.columns = df.columns.str.strip()
 
-    # 3. Rename columns (SAFE)
     column_mapping = {
         'Submission ID': 'sub_id',
         'Full Name': 'name',
@@ -64,22 +80,23 @@ def run_cleaning_pipeline(input_file, output_file):
 
     df = df.rename(columns={k: v for k, v in column_mapping.items() if k in df.columns})
 
-    # 4. Ensure required columns exist
+    # ---------------- REQUIRED CHECK ----------------
     required_cols = ['name', 'Email', 'sleep_time', 'cleanliness', 'social']
-    for col in required_cols:
-        if col not in df.columns:
-            print(f"❌ Missing required column: {col}")
-            return None
 
-    # 5. Clean basic fields
+    missing = [col for col in required_cols if col not in df.columns]
+    if missing:
+        logging.error(f"Missing required columns: {missing}")
+        return None
+
+    # ---------------- BASIC CLEAN ----------------
     df['name'] = df['name'].astype(str).str.strip()
-    df['Email'] = df['Email'].astype(str).str.strip().str.lower()
+    df['Email'] = clean_text(df['Email'])
 
-    # Remove invalid emails
+    before_email = len(df)
     df = df[df['Email'].apply(validate_email)]
-    print(f"📧 Valid emails: {len(df)}")
+    logging.info(f"Valid emails: {len(df)} (removed {before_email - len(df)})")
 
-    # 6. Numeric Columns
+    # ---------------- NUMERIC PROCESSING ----------------
     numeric_cols = [
         'social', 'english', 'cleanliness', 'sleep_time',
         'noise_tolerance', 'irritability', 'friends_freq',
@@ -90,57 +107,63 @@ def run_cleaning_pipeline(input_file, output_file):
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce')
 
-            # Fill missing with median
-            df[col] = df[col].fillna(df[col].median())
+            # Fill missing
+            median_val = df[col].median()
+            df[col] = df[col].fillna(median_val)
 
-            # Clip outliers (0–10 expected)
+            # Clip values (expected range 0–10)
             df[col] = df[col].clip(0, 10)
 
-            # Normalize (robust)
+            # Normalize
             df[f'{col}_norm'] = safe_normalize(df[col])
 
-    # 7. Hobby Processing (UPGRADED)
+    # ---------------- HOBBY FEATURE ENGINEERING ----------------
     hobby_list = ['coding', 'music', 'sports', 'gaming', 'studies', 'social']
 
     if 'hobbies_raw' in df.columns:
-        df['hobbies_raw'] = df['hobbies_raw'].fillna('').str.lower()
+        df['hobbies_raw'] = clean_text(df['hobbies_raw'])
 
         for hobby in hobby_list:
-            df[f'hobby_{hobby}'] = df['hobbies_raw'].str.contains(hobby).astype(int)
+            df[f'hobby_{hobby}'] = df['hobbies_raw'].str.contains(hobby, regex=False).astype(int)
 
-        # Hobby score (optional future use)
         df['hobby_score'] = df[[f'hobby_{h}' for h in hobby_list]].sum(axis=1)
 
-    # 8. Gender clean
+    # ---------------- GENDER CLEAN ----------------
     if 'gender' in df.columns:
         df['gender'] = df['gender'].fillna('Unknown').str.strip().str.capitalize()
 
-    # 9. Satisfaction cleanup
+    # ---------------- SATISFACTION ----------------
     if 'current_sat' in df.columns:
         df['current_sat'] = pd.to_numeric(df['current_sat'], errors='coerce').fillna(5.0)
 
-    # 10. Remove duplicates
-    before = len(df)
+    # ---------------- REMOVE DUPLICATES ----------------
+    before_dup = len(df)
     df = df.drop_duplicates(subset=['Email'])
-    print(f"🧹 Removed {before - len(df)} duplicates")
+    logging.info(f"Duplicates removed: {before_dup - len(df)}")
 
-    # 11. Reset index (VERY IMPORTANT for graph matching)
+    # ---------------- RESET INDEX ----------------
     df = df.reset_index(drop=True)
 
-    # 12. Final sanity check
-    print("📊 Final dataset summary:")
-    print(df[['sleep_time_norm', 'cleanliness_norm', 'social_norm']].describe())
+    # ---------------- FINAL VALIDATION ----------------
+    key_cols = ['sleep_time_norm', 'cleanliness_norm', 'social_norm']
+    if not all(col in df.columns for col in key_cols):
+        logging.error("Normalization failed for key features")
+        return None
 
-    # 13. Save
+    logging.info("Final dataset stats:")
+    logging.info(df[key_cols].describe())
+
+    # ---------------- SAVE ----------------
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
     df.to_csv(output_file, index=False)
 
-    print(f"\n✅ SUCCESS: Cleaned {len(df)} records")
-    print(f"📂 Saved to: {output_file}")
+    logging.info(f"✅ Saved cleaned data → {output_file}")
 
     return df
 
 
+# ==========================================
+# ENTRY POINT
 # ==========================================
 
 if __name__ == "__main__":
