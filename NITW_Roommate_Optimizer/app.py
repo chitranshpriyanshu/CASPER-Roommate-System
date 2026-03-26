@@ -9,7 +9,7 @@ from email.mime.text import MIMEText
 import networkx as nx
 import seaborn as sns
 import matplotlib.pyplot as plt
-import random  # ✅ ADDED
+import random
 
 from src.graph.graph_builder import build_edges
 from src.graph.matcher import max_weight_matching
@@ -170,10 +170,7 @@ final_pairs = st.session_state.final_pairs
 # ---------------- ROOM ALLOCATION ----------------
 room_numbers = list(range(100, 100 + len(final_pairs)))
 random.shuffle(room_numbers)
-
-pair_with_rooms = []
-for i, (a, b) in enumerate(final_pairs):
-    pair_with_rooms.append((a, b, room_numbers[i]))
+pair_with_rooms = [(a, b, room_numbers[i]) for i, (a, b) in enumerate(final_pairs)]
 
 # ---------------- METRICS ----------------
 col1, col2, col3 = st.columns(3)
@@ -185,8 +182,8 @@ col3.metric("📊 Avg Score", average_score(final_pairs))
 st.subheader("⚖️ Algorithm Comparison")
 
 greedy_pairs = smart_fallback(list(df.index))
-greedy_score = 0.39
-blossom_score = 0.54
+greedy_score = average_score(greedy_pairs)
+blossom_score = average_score(final_pairs)
 
 colA, colB = st.columns(2)
 colA.metric("🟡 Greedy Matching Score", greedy_score)
@@ -218,10 +215,7 @@ with colA:
             if res1 != True or res2 != True:
                 success = False
 
-        if success:
-            st.success("All emails sent successfully!")
-        else:
-            st.error("Some emails failed")
+        st.success("Emails sent!" if success else "Some emails failed")
 
 with colB:
     csv_data = []
@@ -229,40 +223,64 @@ with colB:
         csv_data.append({
             "Room": room,
             "Student 1": df.loc[a, 'name'],
-            "Email 1": df.loc[a, 'Email'],
             "Student 2": df.loc[b, 'name'],
-            "Email 2": df.loc[b, 'Email'],
             "Score": compatibility_score(a,b)[0]
         })
 
-    csv_df = pd.DataFrame(csv_data)
+    st.download_button("⬇ Download CSV",
+        pd.DataFrame(csv_data).to_csv(index=False),
+        "roommate_pairs.csv")
 
-    st.download_button(
-        "⬇ Download Pairings CSV",
-        csv_df.to_csv(index=False),
-        "roommate_pairs.csv",
-        "text/csv"
-    )
+# ---------------- HEATMAP ----------------
+st.subheader("🔥 Compatibility Heatmap")
+matrix = [[compatibility_score(i,j)[0] for j in df.index] for i in df.index]
+fig, ax = plt.subplots()
+sns.heatmap(matrix, ax=ax, cmap="coolwarm")
+st.pyplot(fig)
+
+# ---------------- DISTRIBUTION ----------------
+st.subheader("📊 Match Score Distribution")
+scores = [compatibility_score(a,b)[0] for a,b in final_pairs]
+st.plotly_chart(px.histogram(x=scores))
 
 # ---------------- MATCHES ----------------
 st.subheader("👥 Roommate Pairs")
 
 for a, b, room in pair_with_rooms:
-
     name_a = df.loc[a, 'name']
     name_b = df.loc[b, 'name']
-    email_a = df.loc[a, 'Email']
-    email_b = df.loc[b, 'Email']
-
     score, sleep, clean, social = compatibility_score(a, b)
-
-    color = "#00C853" if score > 0.7 else "#FFC107" if score > 0.5 else "#FF5252"
 
     st.markdown(f"""
     <div style="padding:15px;margin-bottom:12px;border-radius:12px;
-    background-color:#1e1e1e;border-left:6px solid {color};">
+    background-color:#1e1e1e;">
         <b>{name_a} ↔ {name_b}</b><br>
-        <span style="color:{color};">Score: {score}</span><br>
-        🏠 Room: <b>{room}</b>
+        Score: {score}<br>
+        🏠 Room: {room}
     </div>
     """, unsafe_allow_html=True)
+
+# ---------------- GRAPH ----------------
+st.subheader("🧠 Smart Matching Graph")
+
+G = nx.Graph()
+for i in df.index:
+    G.add_node(i)
+
+pos = nx.spring_layout(G, seed=42)
+
+edge_traces = []
+for a, b in final_pairs:
+    x0, y0 = pos[a]
+    x1, y1 = pos[b]
+
+    edge_traces.append(go.Scatter(
+        x=[x0, x1], y=[y0, y1],
+        mode='lines'
+    ))
+
+node_x, node_y = zip(*[pos[n] for n in df.index])
+node_trace = go.Scatter(x=node_x, y=node_y, mode='markers')
+
+fig = go.Figure(data=edge_traces + [node_trace])
+st.plotly_chart(fig)
