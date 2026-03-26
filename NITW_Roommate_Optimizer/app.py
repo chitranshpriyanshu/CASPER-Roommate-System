@@ -164,6 +164,12 @@ if st.session_state.final_pairs is None:
     st.stop()
 
 final_pairs = st.session_state.final_pairs
+
+# ---------------- METRICS ----------------
+col1, col2, col3 = st.columns(3)
+col1.metric("👥 Students", len(df))
+col2.metric("🟢 CASPER Matches", len(final_pairs))
+col3.metric("📊 Avg Score", average_score(final_pairs))
 # ---------------- ALGORITHM COMPARISON ----------------
 st.subheader("⚖️ Algorithm Comparison")
 
@@ -182,12 +188,6 @@ colB.metric("🟢 Max Weight (Blossom) Score", blossom_score)
 if greedy_score > 0:
     improvement = round(((blossom_score - greedy_score) / greedy_score) * 100, 2)
     st.success(f"🚀 Improvement: {improvement}% better than Greedy")
-# ---------------- METRICS ----------------
-col1, col2, col3 = st.columns(3)
-col1.metric("👥 Students", len(df))
-col2.metric("🟢 CASPER Matches", len(final_pairs))
-col3.metric("📊 Avg Score", average_score(final_pairs))
-
 # ---------------- EMAIL ALL + DOWNLOAD ----------------
 st.subheader("📤 Actions")
 
