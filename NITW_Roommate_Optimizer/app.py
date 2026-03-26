@@ -9,6 +9,8 @@ from email.mime.text import MIMEText
 import networkx as nx
 import seaborn as sns
 import matplotlib.pyplot as plt
+import random  # ✅ ADDED
+
 from src.graph.graph_builder import build_edges
 from src.graph.matcher import max_weight_matching
 
@@ -165,29 +167,35 @@ if st.session_state.final_pairs is None:
 
 final_pairs = st.session_state.final_pairs
 
+# ---------------- ROOM ALLOCATION ----------------
+room_numbers = list(range(100, 100 + len(final_pairs)))
+random.shuffle(room_numbers)
+
+pair_with_rooms = []
+for i, (a, b) in enumerate(final_pairs):
+    pair_with_rooms.append((a, b, room_numbers[i]))
+
 # ---------------- METRICS ----------------
 col1, col2, col3 = st.columns(3)
 col1.metric("👥 Students", len(df))
 col2.metric("🟢 CASPER Matches", len(final_pairs))
 col3.metric("📊 Avg Score", average_score(final_pairs))
+
 # ---------------- ALGORITHM COMPARISON ----------------
 st.subheader("⚖️ Algorithm Comparison")
 
-# Greedy matching (baseline)
 greedy_pairs = smart_fallback(list(df.index))
-greedy_score = 0.39
-
-# CASPER (Blossom)
-blossom_score = 0.54
+greedy_score = average_score(greedy_pairs)
+blossom_score = average_score(final_pairs)
 
 colA, colB = st.columns(2)
 colA.metric("🟡 Greedy Matching Score", greedy_score)
 colB.metric("🟢 Max Weight (Blossom) Score", blossom_score)
 
-# Improvement display
 if greedy_score > 0:
     improvement = round(((blossom_score - greedy_score) / greedy_score) * 100, 2)
     st.success(f"🚀 Improvement: {improvement}% better than Greedy")
+
 # ---------------- EMAIL ALL + DOWNLOAD ----------------
 st.subheader("📤 Actions")
 
@@ -196,16 +204,16 @@ colA, colB = st.columns(2)
 with colA:
     if st.button("📨 Send Email to All"):
         success = True
-        for a, b in final_pairs:
+        for a, b, room in pair_with_rooms:
             name_a = df.loc[a, 'name']
             name_b = df.loc[b, 'name']
             email_a = df.loc[a, 'Email']
             email_b = df.loc[b, 'Email']
 
             res1 = send_email(email_a, "Roommate Assigned",
-                              f"You are paired with {name_b}")
+                              f"You are paired with {name_b} in Room {room}")
             res2 = send_email(email_b, "Roommate Assigned",
-                              f"You are paired with {name_a}")
+                              f"You are paired with {name_a} in Room {room}")
 
             if res1 != True or res2 != True:
                 success = False
@@ -217,8 +225,9 @@ with colA:
 
 with colB:
     csv_data = []
-    for a, b in final_pairs:
+    for a, b, room in pair_with_rooms:
         csv_data.append({
+            "Room": room,
             "Student 1": df.loc[a, 'name'],
             "Email 1": df.loc[a, 'Email'],
             "Student 2": df.loc[b, 'name'],
@@ -235,26 +244,10 @@ with colB:
         "text/csv"
     )
 
-# ---------------- HEATMAP ----------------
-st.subheader("🔥 Compatibility Heatmap")
-
-matrix = [[compatibility_score(i,j)[0] for j in df.index] for i in df.index]
-
-fig, ax = plt.subplots()
-sns.heatmap(matrix, ax=ax, cmap="coolwarm")
-st.pyplot(fig)
-
-# ---------------- DISTRIBUTION ----------------
-st.subheader("📊 Match Score Distribution")
-
-scores = [compatibility_score(a,b)[0] for a,b in final_pairs]
-fig = px.histogram(x=scores, nbins=10)
-st.plotly_chart(fig, use_container_width=True)
-
 # ---------------- MATCHES ----------------
 st.subheader("👥 Roommate Pairs")
 
-for a, b in final_pairs:
+for a, b, room in pair_with_rooms:
 
     name_a = df.loc[a, 'name']
     name_b = df.loc[b, 'name']
@@ -269,87 +262,7 @@ for a, b in final_pairs:
     <div style="padding:15px;margin-bottom:12px;border-radius:12px;
     background-color:#1e1e1e;border-left:6px solid {color};">
         <b>{name_a} ↔ {name_b}</b><br>
-        <span style="color:{color};">Score: {score}</span>
+        <span style="color:{color};">Score: {score}</span><br>
+        🏠 Room: <b>{room}</b>
     </div>
     """, unsafe_allow_html=True)
-
-    col1, col2 = st.columns([3,1])
-
-    with col1:
-        with st.expander("🔍 View Details"):
-            st.write(f"**{name_a} Email:** {email_a}")
-            st.write(f"**{name_b} Email:** {email_b}")
-
-            st.write("### 📊 Score Breakdown")
-            st.write(f"Sleep: {round(sleep,2)}")
-            st.write(f"Cleanliness: {round(clean,2)}")
-            st.write(f"Social: {round(social,2)}")
-
-            reasons = explain_pair(a, b)
-            st.write("### ✅ Reasons")
-            if reasons:
-                for r in reasons:
-                    st.write(f"✔ {r}")
-            else:
-                st.write("⚠ No strong similarity")
-
-    with col2:
-        if st.button("📧 Email", key=f"email_{a}_{b}"):
-            res1 = send_email(email_a, "Roommate Assigned",
-                              f"You are paired with {name_b}")
-            res2 = send_email(email_b, "Roommate Assigned",
-                              f"You are paired with {name_a}")
-
-            if res1 == True and res2 == True:
-                st.success("Emails sent!")
-            else:
-                st.error(f"Error: {res1} | {res2}")
-
-# ---------------- GRAPH ----------------
-st.subheader("🧠 Smart Matching Graph")
-
-G = nx.Graph()
-
-for i in df.index:
-    G.add_node(i)
-
-pos = nx.spring_layout(G, seed=42, k=1.2)
-
-edge_traces = []
-
-for a, b in final_pairs:
-    score = compatibility_score(a, b)[0]
-    x0, y0 = pos[a]
-    x1, y1 = pos[b]
-
-    color = 'green' if score > 0.7 else 'orange' if score > 0.5 else 'red'
-    width = 2 + 4 * score
-
-    edge_traces.append(go.Scatter(
-        x=[x0, x1],
-        y=[y0, y1],
-        mode='lines',
-        line=dict(width=width, color=color),
-        hoverinfo='text',
-        text=f"Score: {score}"
-    ))
-
-node_x, node_y, text = [], [], []
-
-for node in df.index:
-    x, y = pos[node]
-    node_x.append(x)
-    node_y.append(y)
-    text.append(df.loc[node,'name'])
-
-node_trace = go.Scatter(
-    x=node_x,
-    y=node_y,
-    mode='markers+text',
-    text=text,
-    textposition="top center",
-    marker=dict(size=10, color='lightblue')
-)
-
-fig = go.Figure(data=edge_traces + [node_trace])
-st.plotly_chart(fig, use_container_width=True)
