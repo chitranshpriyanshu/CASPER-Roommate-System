@@ -164,7 +164,24 @@ if st.session_state.final_pairs is None:
     st.stop()
 
 final_pairs = st.session_state.final_pairs
+# ---------------- ALGORITHM COMPARISON ----------------
+st.subheader("⚖️ Algorithm Comparison")
 
+# Greedy matching (baseline)
+greedy_pairs = smart_fallback(list(df.index))
+greedy_score = average_score(greedy_pairs)
+
+# CASPER (Blossom)
+blossom_score = average_score(final_pairs)
+
+colA, colB = st.columns(2)
+colA.metric("🟡 Greedy Matching Score", greedy_score)
+colB.metric("🟢 Max Weight (Blossom) Score", blossom_score)
+
+# Improvement display
+if greedy_score > 0:
+    improvement = round(((blossom_score - greedy_score) / greedy_score) * 100, 2)
+    st.success(f"🚀 Improvement: {improvement}% better than Greedy")
 # ---------------- METRICS ----------------
 col1, col2, col3 = st.columns(3)
 col1.metric("👥 Students", len(df))
