@@ -274,10 +274,21 @@ for a, b, room in pair_with_rooms:
 
     with col2:
         if st.button("Email", key=f"{a}_{b}"):
-            send_email(email_a, "Roommate Assigned",
-                       f"You are paired with {name_b} in Room {room}")
-            send_email(email_b, "Roommate Assigned",
-                       f"You are paired with {name_a} in Room {room}")
+           send_email(
+                email_a,
+                "Roommate Assigned",
+                f"""Hey {name_a}! You are paired with {name_b} in Room {room}.
+                    We hope you both will have a great experience together.
+            This is a system generated email. Thank you for your participation!"""
+                    )
+
+           send_email(
+                    email_b,
+                    "Roommate Assigned",
+                f"""Hey {name_b}! You are paired with {name_a} in Room {room}.
+            We hope you both will have a great experience together.
+            This is a system generated email. Thank you for your participation!"""
+            )
             st.success("Sent")
 
 # ---------------- GRAPH ----------------
