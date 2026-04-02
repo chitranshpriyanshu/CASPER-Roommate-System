@@ -207,9 +207,11 @@ with colA:
             email_b = df.loc[b, 'Email']
 
             send_email(email_a, "Roommate Assigned",
-                       f"You are paired with {name_b} in Room {room}")
+                       f"Hey {name_a}! You are paired with {name_b} in Room {room}. We Hope you bath will have a great experience together. 
+                       This is a system generated Email. Thank You For Your Participation!")
             send_email(email_b, "Roommate Assigned",
-                       f"You are paired with {name_a} in Room {room}")
+                       f"Hey {name_b}! You are paired with {name_a} in Room {room}. We Hope you bath will have a great experience together. 
+                       This is a system generated Email. Thank You For Your Participation!"")
 
         st.success("Emails sent")
 
