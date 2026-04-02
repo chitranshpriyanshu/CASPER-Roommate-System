@@ -217,7 +217,7 @@ This is a system generated email. Thank you for your participation!"""
             send_email(email_a, "Roommate Assigned", message_a)
             send_email(email_b, "Roommate Assigned", message_b)
 
-              st.success("Emails sent successfully!")
+
 
 with colB:
     csv_data = []
