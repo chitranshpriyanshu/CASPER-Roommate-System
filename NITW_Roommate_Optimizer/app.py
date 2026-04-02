@@ -206,14 +206,18 @@ with colA:
             email_a = df.loc[a, 'Email']
             email_b = df.loc[b, 'Email']
 
-            send_email(email_a, "Roommate Assigned",
-                       f"{Hey {name_a}! You are paired with {name_b} in Room {room}. We Hope you bath will have a great experience together. 
-                       This is a system generated Email. Thank You For Your Participation!")
-            send_email(email_b, "Roommate Assigned",
-                       f"{Hey {name_b}! You are paired with {name_a} in Room {room}. We Hope you bath will have a great experience together. 
-                       This is a system generated Email. Thank You For Your Participation!"")
+            message_a = f"""Hey {name_a}! You are paired with {name_b} in Room {room}.
+We hope you both will have a great experience together.
+This is a system generated email. Thank you for your participation!"""
 
-        st.success("Emails sent")
+            message_b = f"""Hey {name_b}! You are paired with {name_a} in Room {room}.
+We hope you both will have a great experience together.
+This is a system generated email. Thank you for your participation!"""
+
+            send_email(email_a, "Roommate Assigned", message_a)
+            send_email(email_b, "Roommate Assigned", message_b)
+
+        st.success("Emails sent successfully!")
 
 with colB:
     csv_data = []
